@@ -69,46 +69,70 @@ func (m Model) RenderPodsView() string {
 	if len(m.pods) == 0 {
 		content.WriteString(m.localization.PodNotFound + "\n")
 	} else {
-		content.WriteString(m.localization.Pods + ":\n\n")
-
 		// Calculate optimal pod dimensions based on terminal width
+		podsPerRow := m.getPodsPerRow()
+
 		// Reserve space for borders and margins
 		availableWidth := m.width - 8 // BorderStyle padding and margins
-		minPodWidth := 45             // Minimum pod width for readability
 		maxPodWidth := 60             // Maximum pod width to prevent overly wide boxes
-		spacing := 2                  // Space between pods
 
-		// Calculate how many pods we can fit per row
-		var podsPerRow int
-		var podWidth int
+		// Calculate actual pod width using remaining space
+		totalSpacing := (podsPerRow - 1) * 2 // 2 = spacing between pods
+		availableForPods := availableWidth - totalSpacing
+		podWidth := min(maxPodWidth, availableForPods/podsPerRow)
 
-		// Try to find the best fit
-		for testPodsPerRow := 1; testPodsPerRow <= 6; testPodsPerRow++ {
-			requiredWidth := testPodsPerRow*minPodWidth + (testPodsPerRow-1)*spacing
-			if requiredWidth <= availableWidth {
-				podsPerRow = testPodsPerRow
-				// Calculate actual pod width using remaining space
-				totalSpacing := (testPodsPerRow - 1) * spacing
-				availableForPods := availableWidth - totalSpacing
-				podWidth = min(maxPodWidth, availableForPods/testPodsPerRow)
-			} else {
-				break
+		// Calculate how many rows we can display based on available height
+		// Each pod row takes about 8 lines (pod box height + spacing)
+		podRowHeight := 8
+		availableHeight := m.height - 15 // Reserve space for title, controls, etc.
+		maxVisibleRows := max(1, availableHeight/podRowHeight)
+
+		// Calculate total rows and pagination
+		totalRows := (len(m.pods) + podsPerRow - 1) / podsPerRow
+
+		// Calculate scroll offset in terms of rows
+		selectedRow := m.selectedPod / podsPerRow
+		scrollOffset := 0
+
+		if totalRows > maxVisibleRows {
+			// Calculate scroll offset to keep selected pod visible
+			if selectedRow >= maxVisibleRows {
+				scrollOffset = selectedRow - maxVisibleRows + 1
+			}
+			if scrollOffset > totalRows-maxVisibleRows {
+				scrollOffset = totalRows - maxVisibleRows
 			}
 		}
 
-		// Ensure we have at least 1 pod per row
-		if podsPerRow == 0 {
-			podsPerRow = 1
-			podWidth = min(maxPodWidth, availableWidth)
+		// Show pagination info if needed
+		if totalRows > maxVisibleRows {
+			startRow := scrollOffset + 1
+			endRow := min(totalRows, scrollOffset+maxVisibleRows)
+			content.WriteString(fmt.Sprintf("Rows %d-%d / %d total (%d pods)\n",
+				startRow, endRow, totalRows, len(m.pods)))
+			if scrollOffset > 0 {
+				content.WriteString(m.localization.ScrollUp + "\n")
+			}
+			if scrollOffset+maxVisibleRows < totalRows {
+				content.WriteString(m.localization.ScrollDown + "\n")
+			}
+			content.WriteString("\n")
 		}
 
-		currentIndex := 0
-		for i := 0; i < len(m.pods); i += podsPerRow {
+		content.WriteString(m.localization.Pods + ":\n\n")
+
+		// Render visible rows only
+		startRowIndex := scrollOffset
+		endRowIndex := min(totalRows, scrollOffset+maxVisibleRows)
+
+		for rowIndex := startRowIndex; rowIndex < endRowIndex; rowIndex++ {
+			startPodIndex := rowIndex * podsPerRow
+			endPodIndex := min(len(m.pods), startPodIndex+podsPerRow)
+
 			// Create a row of pods
 			var rowBoxes []string
 
-			for j := 0; j < podsPerRow && i+j < len(m.pods); j++ {
-				podIndex := i + j
+			for podIndex := startPodIndex; podIndex < endPodIndex; podIndex++ {
 				pod := m.pods[podIndex]
 
 				// Determine if this pod is selected
@@ -123,15 +147,15 @@ func (m Model) RenderPodsView() string {
 			if len(rowBoxes) > 0 {
 				content.WriteString(m.joinHorizontal(rowBoxes, podWidth) + "\n\n")
 			}
-
-			currentIndex += podsPerRow
 		}
 	}
 
 	content.WriteString(fmt.Sprintf("\n%s: %t\n", m.localization.AutoRefreshStatus, m.autoRefresh))
 	content.WriteString("\n" + m.localization.Controls + ":\n")
-	content.WriteString("  " + m.localization.UpDown + "\n")
-	content.WriteString("  " + m.localization.LeftRight + "\n")
+	content.WriteString("  " + m.localization.UpDown + ": Navigate rows\n")
+	content.WriteString("  " + m.localization.LeftRight + ": Navigate columns\n")
+	content.WriteString("  Page Up/Down, Ctrl+U/D: Fast scroll\n")
+	content.WriteString("  Home/End, g/G: Go to first/last pod\n")
 	content.WriteString("  " + m.localization.ViewLogs + "\n")
 	content.WriteString("  Esc/Backspace: " + m.localization.NamespaceTitle + "\n")
 	content.WriteString("  " + m.localization.Refresh + "\n")

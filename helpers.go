@@ -40,6 +40,26 @@ func (m Model) getMaxVisibleItems() int {
 	return availableHeight
 }
 
+// getPodsPerRow calculates how many pods can fit per row based on terminal width
+func (m Model) getPodsPerRow() int {
+	availableWidth := m.width - 8 // BorderStyle padding and margins
+	minPodWidth := 45             // Minimum pod width for readability
+	spacing := 2                  // Space between pods
+	podsPerRow := 1
+
+	// Try to find the best fit
+	for testPodsPerRow := 1; testPodsPerRow <= 6; testPodsPerRow++ {
+		requiredWidth := testPodsPerRow*minPodWidth + (testPodsPerRow-1)*spacing
+		if requiredWidth <= availableWidth {
+			podsPerRow = testPodsPerRow
+		} else {
+			break
+		}
+	}
+
+	return podsPerRow
+}
+
 // handleKeyMsg processes keyboard input
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
@@ -70,24 +90,17 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.logOffset += 5
 			}
 		} else if m.currentView == "pods" && len(m.pods) > 0 {
-			// Calculate pods per row dynamically
-			availableWidth := m.width - 8
-			minPodWidth := 45
-			spacing := 2
-			podsPerRow := 1
-			for testPodsPerRow := 1; testPodsPerRow <= 6; testPodsPerRow++ {
-				requiredWidth := testPodsPerRow*minPodWidth + (testPodsPerRow-1)*spacing
-				if requiredWidth <= availableWidth {
-					podsPerRow = testPodsPerRow
-				} else {
-					break
-				}
-			}
-
+			podsPerRow := m.getPodsPerRow()
 			// Move up one row
 			newIndex := m.selectedPod - podsPerRow
 			if newIndex >= 0 {
 				m.selectedPod = newIndex
+			} else {
+				// If we can't move up a full row, move to the first pod in current row
+				currentRow := m.selectedPod / podsPerRow
+				if currentRow > 0 {
+					m.selectedPod = 0
+				}
 			}
 		}
 	case "down", "j":
@@ -107,42 +120,19 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		} else if m.currentView == "pods" && len(m.pods) > 0 {
-			// Calculate pods per row dynamically
-			availableWidth := m.width - 8
-			minPodWidth := 45
-			spacing := 2
-			podsPerRow := 1
-			for testPodsPerRow := 1; testPodsPerRow <= 6; testPodsPerRow++ {
-				requiredWidth := testPodsPerRow*minPodWidth + (testPodsPerRow-1)*spacing
-				if requiredWidth <= availableWidth {
-					podsPerRow = testPodsPerRow
-				} else {
-					break
-				}
-			}
-
+			podsPerRow := m.getPodsPerRow()
 			// Move down one row
 			newIndex := m.selectedPod + podsPerRow
 			if newIndex < len(m.pods) {
 				m.selectedPod = newIndex
+			} else {
+				// If we can't move down a full row, move to the last pod
+				m.selectedPod = len(m.pods) - 1
 			}
 		}
 	case "left", "h":
 		if m.currentView == "pods" && m.selectedPod > 0 {
-			// Calculate pods per row dynamically
-			availableWidth := m.width - 8
-			minPodWidth := 45
-			spacing := 2
-			podsPerRow := 1
-			for testPodsPerRow := 1; testPodsPerRow <= 6; testPodsPerRow++ {
-				requiredWidth := testPodsPerRow*minPodWidth + (testPodsPerRow-1)*spacing
-				if requiredWidth <= availableWidth {
-					podsPerRow = testPodsPerRow
-				} else {
-					break
-				}
-			}
-
+			podsPerRow := m.getPodsPerRow()
 			// Check if we're not at the beginning of a row
 			currentCol := m.selectedPod % podsPerRow
 
@@ -152,20 +142,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "right", "l":
 		if m.currentView == "pods" && m.selectedPod < len(m.pods)-1 {
-			// Calculate pods per row dynamically
-			availableWidth := m.width - 8
-			minPodWidth := 45
-			spacing := 2
-			podsPerRow := 1
-			for testPodsPerRow := 1; testPodsPerRow <= 6; testPodsPerRow++ {
-				requiredWidth := testPodsPerRow*minPodWidth + (testPodsPerRow-1)*spacing
-				if requiredWidth <= availableWidth {
-					podsPerRow = testPodsPerRow
-				} else {
-					break
-				}
-			}
-
+			podsPerRow := m.getPodsPerRow()
 			// Check if we're not at the end of a row
 			currentRow := m.selectedPod / podsPerRow
 			currentCol := m.selectedPod % podsPerRow
@@ -174,6 +151,38 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if currentCol < maxCol {
 				m.selectedPod++
 			}
+		}
+	case "pageup", "ctrl+u":
+		if m.currentView == "pods" && len(m.pods) > 0 {
+			podsPerRow := m.getPodsPerRow()
+			// Move up by multiple rows (like page up)
+			rowsToMove := 3
+			newIndex := m.selectedPod - (podsPerRow * rowsToMove)
+			if newIndex < 0 {
+				m.selectedPod = 0
+			} else {
+				m.selectedPod = newIndex
+			}
+		}
+	case "pagedown", "ctrl+d":
+		if m.currentView == "pods" && len(m.pods) > 0 {
+			podsPerRow := m.getPodsPerRow()
+			// Move down by multiple rows (like page down)
+			rowsToMove := 3
+			newIndex := m.selectedPod + (podsPerRow * rowsToMove)
+			if newIndex >= len(m.pods) {
+				m.selectedPod = len(m.pods) - 1
+			} else {
+				m.selectedPod = newIndex
+			}
+		}
+	case "home", "g":
+		if m.currentView == "pods" && len(m.pods) > 0 {
+			m.selectedPod = 0
+		}
+	case "end", "G":
+		if m.currentView == "pods" && len(m.pods) > 0 {
+			m.selectedPod = len(m.pods) - 1
 		}
 	case "enter":
 		if m.currentView == "namespaces" && len(m.namespaces) > 0 {
